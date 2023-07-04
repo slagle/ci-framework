@@ -19,11 +19,26 @@
     - always
   ansible.builtin.set_fact:
     cifmw_edpm_deploy_env: "{{ cifmw_install_yamls_environment | combine({'PATH': cifmw_path }) }}"
+    cifmw_edpm_deploy_provisioned_compute_env: |
+      {% if cifmw_external_compute_info is defined %}
+      DATAPLANE_ANSIBLE_USER: {{ cifmw_external_compute_info.remote_user }}
+      SSH_KEY_FILE: "{{ ansible_user_dir }}/.ssh/id_rsa"
+      DATAPLANE_COMPUTE_IP: {{ cifmw_external_compute_info.private_net_ip }}
+      {% endif %}
     cacheable: true
+
+- name: Save hostvars
+  ansible.builtin.copy:
+    dest: "{{ ansible_user_dir }}/ci-framework-data/artifacts/hostvars-dump.yml"
+    content: "{{ hostvars | to_nice_yaml }}"
 
 - name: Deploy EDPM
   vars:
-    make_edpm_deploy_env: "{{ cifmw_edpm_deploy_env }}"
+    make_edpm_deploy_env: >-
+      {{
+        cifmw_edpm_deploy_env |
+        combine(cifmw_edpm_deploy_provisioned_compute_env | from_yaml)
+      }}
     make_edpm_deploy_dryrun: "{{ cifmw_edpm_deploy_dryrun | bool }}"
   ansible.builtin.include_role:
     name: 'install_yamls_makes'

@@ -1,0 +1,58 @@
+---
+- hosts: localhost
+  gather_facts: false
+  connection: local
+  tasks:
+    - name: Ensure we know compute host keys
+      ansible.builtin.shell:
+        cmd: |
+          ssh-keyscan {{ hostvars.compute.ansible_host }} >> ~/.ssh/known_hosts
+
+- hosts: compute
+  gather_facts: true
+  tasks:
+    - name: Copy repositories from controller to compute
+      become: true
+      ansible.builtin.copy:
+        dest: "/etc/yum.repos.d/"
+        src: "{{ cifmw_basedir }}/artifacts/repositories/"
+
+- hosts: localhost
+  gather_facts: false
+  connection: local
+  tasks:
+
+    - name: Debug regex input
+      ansible.builtin.debug:
+        msg: "{{ hostvars.compute }}"
+
+    - name: Set facts for further usage within the framework
+      vars:
+        isolated_net_regex: "^192\\.168\\.122\\..*"
+      ansible.builtin.set_fact:
+        cifmw_external_compute_info:
+          private_net_ip: >-
+            {{
+              hostvars.compute.ansible_all_ipv4_addresses |
+              select('match', isolated_net_regex) |
+              first
+            }}
+          remote_user: "{{ hostvars.compute.ansible_user | default('zuul') }}"
+
+    - name: Ensure we get the private IP
+      ansible.builtin.assert:
+        that:
+          - cifmw_external_compute_info.private_net_ip != ''
+
+    - name: Ensure we know about the private host keys
+      ansible.builtin.shell:
+        cmd: |
+          ssh-keyscan {{ cifmw_external_compute_info.private_net_ip }} >> ~/.ssh/known_hosts
+
+    - name: Save compute info
+      vars:
+        file_content:
+          cifmw_external_compute_info: "{{ cifmw_external_compute_info }}"
+      ansible.builtin.copy:
+        dest: "{{ cifmw_basedir }}/artifacts/{{ step }}_{{ hook_name }}.yml"
+        content: "{{ file_content | to_nice_yaml }}"

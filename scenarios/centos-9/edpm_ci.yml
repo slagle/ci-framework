@@ -2,21 +2,13 @@
 ansible_user_dir: "{{ lookup('env', 'HOME') }}"
 cifmw_installyamls_repos: "{{ ansible_user_dir }}/src/github.com/openstack-k8s-operators/install_yamls"
 cifmw_install_yamls_vars:
-  OUTPUT_DIR: "{{ cifmw_basedir }}/artifacts/edpm_compute" # used by gen-ansibleee-ssh-key.sh
-  OUTPUT_BASEDIR: "{{ cifmw_basedir }}/artifacts/edpm_compute" # used by gen-edpm-compute-node.sh
-  SSH_KEY: "{{ cifmw_basedir }}/artifacts/edpm_compute/ansibleee-ssh-key-id_rsa"
   DATAPLANE_REPO: "{{ ansible_user_dir }}/src/github.com/openstack-k8s-operators/dataplane-operator"
   STORAGE_CLASS: crc-csi-hostpath-provisioner
+  NNCP_INTERFACE: ens7
+  NETWORK_MTU: 1400
 
-cifmw_use_crc: true
-cifmw_use_libvirt: true
-cifmw_rhol_crc_use_installyamls: true
-
-pre_infra:
-  - name: Download needed tools
-    inventory: "{{ cifmw_installyamls_repos }}/devsetup/hosts"
-    type: playbook
-    source: "{{ cifmw_installyamls_repos }}/devsetup/download_tools.yaml"
+cifmw_use_crc: false
+cifmw_use_libvirt: false
 
 # edpm_deploy role vars
 cifmw_edpm_deploy_run_validation: true
@@ -35,6 +27,12 @@ cifmw_openshift_setup_skip_internal_registry: true
 cifmw_openshift_user: "kubeadmin"
 cifmw_openshift_password: "123456789"
 cifmw_openshift_kubeconfig: "{{ ansible_user_dir }}/.crc/machines/crc/kubeconfig"
+
+pre_infra:
+  - name: Download needed tools
+    inventory: "{{ cifmw_installyamls_repos }}/devsetup/hosts"
+    type: playbook
+    source: "{{ cifmw_installyamls_repos }}/devsetup/download_tools.yaml"
 
 pre_deploy:
   - name: Disable openstack marketplace

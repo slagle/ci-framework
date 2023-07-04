@@ -1,0 +1,43 @@
+---
+- name: Patch the image.config.openshift.io resource to include insecure registry
+  ansible.builtin.shell: |
+    oc patch --type=merge --patch='{
+    "spec": {
+      "registrySources": {
+        "insecureRegistries": [
+        "{{ content_provider_registry_ip }}:5001"
+        ]
+      } 
+    }
+    }' image.config.openshift.io/cluster
+
+- name: Set Insecure registry for content provider
+  become: true
+  remote_user: core
+  ansible.builtin.blockinfile:
+    state: present
+    insertafter: EOF
+    dest: /etc/containers/registries.conf
+    block: |
+      [[registry]]
+      location = "{{ content_provider_registry_ip | trim }}:5001"
+      insecure = true
+      blocked = false
+      mirror-by-digest-only = false
+      prefix = ""
+
+- name: Restart crio
+  become: true
+  remote_user: core
+  ansible.builtin.service:
+    name: crio
+    state: restarted
+    enabled: true
+
+- name: Restart kubelet
+  become: true
+  remote_user: core
+  ansible.builtin.service:
+    name: kubelet
+    state: restarted
+    enabled: true
