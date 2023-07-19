@@ -1,0 +1,45 @@
+---
+# Copyright Red Hat, Inc.
+# All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may
+# not use this file except in compliance with the License. You may obtain
+# a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations
+# under the License.
+
+- name: Ensure directory exists
+  ansible.builtin.file:
+    path: "{{ cifmw_override_op_image_dir }}"
+    state: directory
+
+- name: Update CSVs with custom images
+  when:
+  - cifmw_openstack_svc_image is defined
+  - cifmw_openshift_kubeconfig is defined
+  environment:
+    KUBECONFIG: "{{ cifmw_openshift_kubeconfig }}"
+    PATH: "{{ cifmw_path }}"
+  block:
+    - name: Dump OpenStackControlPlane CR into a file
+      ansible.builtin.shell: |
+        cp_name=$(oc get OpenStackControlPlane -n {{ cifmw_install_yamls_defaults['NAMESPACE'] }} --no-headers=true | awk '{print $1}')
+        oc get OpenStackControlPlane { cp_name } -n {{ cifmw_install_yamls_defaults['NAMESPACE'] }} -o yaml > {{ cifmw_override_op_image_dir }}/osp_cp_cr.yaml
+
+    - name: Replace openstack service images in the yaml file
+      with_dict: "{{cifmw_openstack_svc_image}}"
+      ansible.builtin.replace:
+        path: "{{cifmw_override_op_image_dir}}/osp_cp_cr.yaml"
+        regexp: "{{ item.key }}\\[[^\\]]+\\]"
+        replace: "{{ item.key}}{{item.value}}"
+
+    - name: Apply the changes to OpenStackControlPlane CR
+      ansible.buil/tin.shell: |
+        sed '/resourceVersion/d' {{cifmw_override_op_image_dir}}/osp_cp_cr.yaml > {{cifmw_override_op_image_dir}}/osp_cp_cr.yaml
+        oc replace -f {{cifmw_override_op_image_dir}}/osp_cp_cr.yaml

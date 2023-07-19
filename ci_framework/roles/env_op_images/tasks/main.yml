@@ -1,0 +1,89 @@
+---
+# Copyright Red Hat, Inc.
+# All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may
+# not use this file except in compliance with the License. You may obtain
+# a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations
+# under the License.
+
+- name: Ensure directory is present
+  ansible.builtin.file:
+    path: "{{ cifmw_env_op_images_dir }}"
+    state: directory
+
+- name: Create a file to store the images
+  ansible.builtin.copy:
+    dest: "{{ cifmw_env_op_images_dir }}/{{ cifmw_env_op_images_file  }}"
+    content: "cifmw_install_yamls_vars:"
+
+- name: Check for oc command
+  ansible.builtin.command: command -v oc
+  environment:
+    PATH: "{{ cifmw_path | default(ansible_env.PATH) }}"
+  register: oc_installed
+  ignore_errors: true
+
+- name: Get openstack operator images
+  when:
+    - oc_installed is defined
+    - oc_installed.rc == 0
+    - cifmw_openshift_kubeconfig is defined
+  environment:
+    KUBECONFIG: "{{ cifmw_openshift_kubeconfig }}"
+    PATH: "{{ cifmw_path }}"
+  block:
+    - name: Get openstack operator-index image
+      ci_script:
+        output_dir: "{{ cifmw_env_op_images_dir }}/logs"
+        script: |
+          pod_name=$(oc get pods -l olm.catalogSource=openstack-operator-index --no-headers=true -n {{ cifmw_install_yamls_defaults['OPERATOR_NAMESPACE'] }} | awk '{print $1}');
+          image=$(oc get pod ${pod_name} -n {{ cifmw_install_yamls_defaults['OPERATOR_NAMESPACE'] }} -o jsonpath='{.status.containerStatuses[0].imageID}');
+          echo "  OPENSTACK_IMG: ${image}" >> "{{ cifmw_env_op_images_dir }}/{{ cifmw_env_op_images_file  }}"
+
+    - name: Get openstack-operator image
+      ci_script:
+        output_dir: "{{ cifmw_env_op_images_dir }}/logs"
+        script: |
+          pod_name=$(oc get pods -l openstack.org/operator-name=openstack --no-headers=true -n {{ cifmw_install_yamls_defaults['OPERATOR_NAMESPACE'] }} | awk '{print $1}' );
+          image=$(oc get pod ${pod_name} -n {{ cifmw_install_yamls_defaults['OPERATOR_NAMESPACE'] }} -o jsonpath='{.status.containerStatuses[1].imageID}');
+          echo "  OPENSTACK_OP_IMG: ${image}" >> "{{ cifmw_env_op_images_dir }}/{{ cifmw_env_op_images_file  }}"
+
+    - name: Get Rabbitmq-operator image
+      ci_script:
+        output_dir: "{{ cifmw_env_op_images_dir }}/logs"
+        script: |
+          pod_name=$(oc get pods -l app.kubernetes.io/component=rabbitmq-operator --no-headers=true -n {{ cifmw_install_yamls_defaults['OPERATOR_NAMESPACE'] }} | awk '{print $1}');
+          image=$(oc get pod ${pod_name} -n {{ cifmw_install_yamls_defaults['OPERATOR_NAMESPACE'] }} -o jsonpath='{.status.containerStatuses[0].imageID}');
+          echo "  RABBITMQ_OP_IMG: ${image}" >> "{{ cifmw_env_op_images_dir }}/{{ cifmw_env_op_images_file  }}"
+
+    - name: Get Rabbitmq-operator image
+      ci_script:
+        output_dir: "{{ cifmw_env_op_images_dir }}/logs"
+        script: |
+          for pod in `oc get pod -l openstack.org/operator-name --no-headers=true -n {{ cifmw_install_yamls_defaults['OPERATOR_NAMESPACE'] }} | grep -v 'openstack-operator-controller-manager' | awk '{print $1}'`;  do
+             operator_name=$(oc get pod $pod -o jsonpath='{.metadata.labels.openstack\.org/operator-name}' -n {{ cifmw_install_yamls_defaults['OPERATOR_NAMESPACE'] }} --no-headers=true | tr '[:lower:]' '[:upper:]');
+             image_name=$(oc get pod $pod -n {{ cifmw_install_yamls_defaults['OPERATOR_NAMESPACE'] }} -o jsonpath='{.status.containerStatuses[1].image}' );
+             echo "  ${operator_name}_OP_IMG: ${image_name}" >> {{ cifmw_env_op_images_dir }}/{{ cifmw_env_op_images_file  }}"
+          done
+
+    - name: Get openstack service images
+      ci_script:
+        output_dir: "{{ cifmw_env_op_images_dir }}/logs"
+        script: |
+          echo -e "\ncifmw_openstack_svc_image:"  >> {{ cifmw_env_op_images_dir }}/{{ cifmw_env_op_images_file  }}"
+          for pod in `oc get pod  --no-headers=true  -n {{ cifmw_install_yamls_defaults['NAMESPACE'] }} | grep -v Completed | awk '{print $1}'`;  do
+            for container in `oc get pod ${pod} -n {{ cifmw_install_yamls_defaults['NAMESPACE'] }} -o jsonpath='{.status.containerStatuses[*]}'` ; do
+              container_image=$(echo ${container}|jq -r .imageID|cut -d "@" -f 1)
+              tag=$(echo ${container}|jq -r .imageID|cut -d "@" -f 2)
+              echo "  ${container_image}: ${tag}" >> {{ cifmw_env_op_images_dir }}/{{ cifmw_env_op_images_file  }}"
+            done
+          done
+
