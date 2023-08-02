@@ -37,8 +37,10 @@
   become: true
   args:
     chdir: "{{ cifmw_build_containers_basedir }}/artifacts"
-  ansible.builtin.shell: |
-    set -o pipefail && bash build_containers.sh 2>&1 {{ cifmw_build_containers_timestamper_cmd }} > {{ cifmw_build_containers_basedir }}/logs/build.log
+  ci_script: 
+    cmd: |
+      set -o pipefail && bash build_containers.sh 2>&1 {{ cifmw_build_containers_timestamper_cmd }} > {{ cifmw_build_containers_basedir }}/logs/build.log
+    output_dir: "{{ cifmw_artifacts_basedir }}/artifacts"
   environment:
    PATH: /usr/local/bin:{{ ansible_env.PATH }}
 
@@ -58,20 +60,26 @@
           - authfile_exist.stat.exists | bool
 
 - name: Retrieve built images  # noqa risky-shell-pipe
-  ansible.builtin.shell: "podman images | grep {{ cifmw_build_containers_container_name_prefix }} | awk '{ print $1 }'"
+  ci_script:
+    output_dir: "{{ cifmw_artifacts_basedir }}/artifacts"
+    cmd: "podman images | grep {{ cifmw_build_containers_container_name_prefix }} | awk '{ print $1 }'"
   register: built_images
   become: true
   changed_when: false
 
 - name: Store built images to containers-built.log
   become: true
-  ansible.builtin.shell: |
-    podman images | grep {{ cifmw_build_containers_container_name_prefix }} > {{ cifmw_build_containers_basedir }}/logs/containers-built.log
+  ci_script:
+    output_dir: "{{ cifmw_artifacts_basedir }}/artifacts"
+    cmd: |
+      podman images | grep {{ cifmw_build_containers_container_name_prefix }} > {{ cifmw_build_containers_basedir }}/logs/containers-built.log
 
 - name: "Push image: {{ item }}"
   become: true
-  ansible.builtin.command: >
-    buildah push {{ item }}:{{ cifmw_build_containers_image_tag }}
+  ci_script:
+    output_dir: "{{ cifmw_artifacts_basedir }}/artifacts"
+    cmd: >
+      buildah push {{ item }}:{{ cifmw_build_containers_image_tag }}
   loop: "{{ built_images.stdout_lines }}"
   when:
     - cifmw_build_containers_buildah_push | default ('false') | bool

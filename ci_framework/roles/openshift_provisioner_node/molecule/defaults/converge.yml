@@ -38,7 +38,8 @@
         key: "{{ cifmw_opn_user }}"
 
     - name: Verify external network bridge exists
-      ansible.builtin.command:
+      ci_script:
+        output_dir: "{{ cifmw_artifacts_basedir }}/artifacts"
         cmd: "nmcli con show baremetal"
 
     - name: Perform cleanup
