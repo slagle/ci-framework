@@ -53,7 +53,7 @@
       environment:
         KUBECONFIG: "{{ cifmw_openshift_kubeconfig }}"
         PATH: "{{ cifmw_path }}"
-      ci_script: 
+      ci_script:
         output_dir: "{{ cifmw_os_must_gather_output_dir }}/artifacts"
         cmd: |
           mkdir -p {{ cifmw_os_must_gather_output_dir }}/logs/oc_inspect
