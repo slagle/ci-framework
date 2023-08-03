@@ -23,7 +23,7 @@
 
 - name: Check for oc command
   ci_script:
-    output_dir: "{{ cifmw_artifacts_basedir }}/artifacts"
+    output_dir: "{{ cifmw_os_must_gather_output_dir }}/artifacts"
     cmd: command -v oc
   environment:
     PATH: "{{ cifmw_path | default(ansible_env.PATH) }}"
@@ -41,7 +41,7 @@
         KUBECONFIG: "{{ cifmw_openshift_kubeconfig }}"
         PATH: "{{ cifmw_path }}"
       ci_script:
-        output_dir: "{{ cifmw_artifacts_basedir }}/artifacts"
+        output_dir: "{{ cifmw_os_must_gather_output_dir }}/artifacts"
         cmd: >-
           oc adm must-gather --image {{ cifmw_os_must_gather_image }}
           --timeout {{ cifmw_os_must_gather_timeout }}
@@ -53,9 +53,10 @@
       environment:
         KUBECONFIG: "{{ cifmw_openshift_kubeconfig }}"
         PATH: "{{ cifmw_path }}"
-      ci_script: |
-        mkdir -p {{ cifmw_os_must_gather_output_dir }}/logs/oc_inspect
-        for ns in openstack-operators openstack baremetal-operator-system openshift-machine-api cert-manager openshift-nmstate metallb-system; do
-          oc adm inspect namespace/"${ns}" --dest-dir={{ cifmw_os_must_gather_output_dir }}/logs/oc_inspect || echo "Error getting logs from ${ns}"
-        done
-      output_dir: "{{ cifmw_artifacts_basedir }}/artifacts"
+      ci_script: 
+        output_dir: "{{ cifmw_os_must_gather_output_dir }}/artifacts"
+        cmd: |
+          mkdir -p {{ cifmw_os_must_gather_output_dir }}/logs/oc_inspect
+          for ns in openstack-operators openstack baremetal-operator-system openshift-machine-api cert-manager openshift-nmstate metallb-system; do
+            oc adm inspect namespace/"${ns}" --dest-dir={{ cifmw_os_must_gather_output_dir }}/logs/oc_inspect || echo "Error getting logs from ${ns}"
+          done

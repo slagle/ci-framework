@@ -39,7 +39,7 @@
 
     - name: Verify external network bridge exists
       ci_script:
-        output_dir: "{{ cifmw_artifacts_basedir }}/artifacts"
+        output_dir: "{{ cifmw_opn_basedir }}/artifacts"
         cmd: "nmcli con show baremetal"
 
     - name: Perform cleanup

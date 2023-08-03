@@ -21,7 +21,7 @@
 - name: Install tcib package
   become: true
   ci_script:
-    output_dir: "{{ cifmw_artifacts_basedir }}/artifacts"
+    output_dir: "{{ cifmw_build_containers_basedir }}/artifacts"
     cmd: |
       pip install -r requirements.txt
       python setup.py install
