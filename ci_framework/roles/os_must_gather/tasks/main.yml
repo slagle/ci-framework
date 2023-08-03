@@ -24,7 +24,7 @@
 - name: Check for oc command
   ci_script:
     output_dir: "{{ cifmw_os_must_gather_output_dir }}/artifacts"
-    cmd: command -v oc
+    script: command -v oc
   environment:
     PATH: "{{ cifmw_path | default(ansible_env.PATH) }}"
   register: oc_installed
@@ -42,7 +42,7 @@
         PATH: "{{ cifmw_path }}"
       ci_script:
         output_dir: "{{ cifmw_os_must_gather_output_dir }}/artifacts"
-        cmd: >-
+        script: >-
           oc adm must-gather --image {{ cifmw_os_must_gather_image }}
           --timeout {{ cifmw_os_must_gather_timeout }}
           --host-network={{ cifmw_os_must_gather_host_network }}
@@ -55,7 +55,7 @@
         PATH: "{{ cifmw_path }}"
       ci_script:
         output_dir: "{{ cifmw_os_must_gather_output_dir }}/artifacts"
-        cmd: |
+        script: |
           mkdir -p {{ cifmw_os_must_gather_output_dir }}/logs/oc_inspect
           for ns in openstack-operators openstack baremetal-operator-system openshift-machine-api cert-manager openshift-nmstate metallb-system; do
             oc adm inspect namespace/"${ns}" --dest-dir={{ cifmw_os_must_gather_output_dir }}/logs/oc_inspect || echo "Error getting logs from ${ns}"

@@ -22,7 +22,7 @@
   become: true
   ci_script:
     output_dir: "{{ cifmw_build_containers_basedir }}/artifacts"
-    cmd: |
+    script: |
       pip install -r requirements.txt
       python setup.py install
   args:

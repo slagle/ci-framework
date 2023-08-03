@@ -44,7 +44,7 @@
     PATH: "{{ cifmw_path }}"
   ci_script:
     output_dir: "{{ cifmw_set_openstack_containers_basedir }}/artifacts"
-    cmd: oc get pods -n {{ cifmw_install_yamls_defaults['OPERATOR_NAMESPACE'] }} -o name
+    script: oc get pods -n {{ cifmw_install_yamls_defaults['OPERATOR_NAMESPACE'] }} -o name
   register: operator_pod
 
 - name: list all pods
@@ -65,7 +65,7 @@
     PATH: "{{ cifmw_path }}"
   ci_script:
     output_dir: "{{ cifmw_set_openstack_containers_basedir }}/artifacts"
-    cmd: >-
+    script: >-
       oc set env {{ operator_pod }} -n {{ cifmw_install_yamls_defaults['OPERATOR_NAMESPACE'] }} --list
   register: containers_env_list
 
@@ -78,7 +78,7 @@
 - name: Run update_env_vars.sh script
   ci_script:
     output_dir: "{{ cifmw_set_openstack_containers_basedir }}/artifacts"
-    cmd: >-
+    script: >-
       {{ cifmw_set_openstack_containers_basedir }}/artifacts/update_env_vars.sh
 
 - name: Wait for reinstallation of meta operator
@@ -104,7 +104,7 @@
     PATH: "{{ cifmw_path }}"
   ci_script:
     output_dir: "{{ cifmw_set_openstack_containers_basedir }}/artifacts"
-    cmd: oc get pods -n {{ cifmw_install_yamls_defaults['OPERATOR_NAMESPACE'] }} -o name
+    script: oc get pods -n {{ cifmw_install_yamls_defaults['OPERATOR_NAMESPACE'] }} -o name
   register: operator_pod_name
 
 - name: Get the operator pod name
@@ -121,7 +121,7 @@
     PATH: "{{ cifmw_path }}"
   ci_script:
     output_dir: "{{ cifmw_set_openstack_containers_basedir }}/artifacts"
-    cmd: >-
+    script: >-
       oc set env {{ operator_pod_name }} -n {{ cifmw_install_yamls_defaults['OPERATOR_NAMESPACE'] }} --list > operator_env.txt
   args:
     chdir: "{{ cifmw_set_openstack_containers_basedir }}/artifacts"
