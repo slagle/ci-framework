@@ -35,9 +35,8 @@
 
 - name: Run container_build.sh script
   become: true
-  args:
-    chdir: "{{ cifmw_build_containers_basedir }}/artifacts"
   ci_script:
+    chdir: "{{ cifmw_build_containers_basedir }}/artifacts"
     output_dir: "{{ cifmw_build_containers_basedir }}/artifacts"
     script: |
       set -o pipefail && bash build_containers.sh 2>&1 {{ cifmw_build_containers_timestamper_cmd }} > {{ cifmw_build_containers_basedir }}/logs/build.log
@@ -78,8 +77,7 @@
   become: true
   ci_script:
     output_dir: "{{ cifmw_build_containers_basedir }}/artifacts"
-    script: >
-      buildah push {{ item }}:{{ cifmw_build_containers_image_tag }}
+    script: "buildah push {{ item }}:{{ cifmw_build_containers_image_tag }}"
   loop: "{{ built_images.stdout_lines }}"
   when:
     - cifmw_build_containers_buildah_push | default ('false') | bool

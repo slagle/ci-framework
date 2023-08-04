@@ -120,6 +120,5 @@
   ci_script:
     output_dir: "{{ cifmw_set_openstack_containers_basedir }}/artifacts"
     script: "oc set env {{ operator_pod_name }} -n {{ cifmw_install_yamls_defaults['OPERATOR_NAMESPACE'] }} --list > operator_env.txt"
-  args:
     chdir: "{{ cifmw_set_openstack_containers_basedir }}/artifacts"
     creates: operator_env.txt
