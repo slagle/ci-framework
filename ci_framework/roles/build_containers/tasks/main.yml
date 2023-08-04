@@ -59,9 +59,7 @@
           - authfile_exist.stat.exists | bool
 
 - name: Retrieve built images  # noqa risky-shell-pipe
-  ci_script:
-    output_dir: "{{ cifmw_build_containers_basedir }}/artifacts"
-    script: "podman images | grep {{ cifmw_build_containers_container_name_prefix }} | awk '{ print $1 }'"
+  ansible.builtin.shell: "podman images | grep {{ cifmw_build_containers_container_name_prefix }} | awk '{ print $1 }'"
   register: built_images
   become: true
   changed_when: false
