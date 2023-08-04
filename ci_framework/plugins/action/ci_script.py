@@ -53,7 +53,7 @@ EXAMPLES = r'''
   register: script_output
   ci_script:
     output_dir: "/home/zuul/ci-framework-data/artifacts"
-    cmd: |
+    script: |
       mkdir /home/zuul/test-dir
       cd /home/zuul/test-dir
       git clone https://github.com/openstack-k8s-operators/ci-framework.git
