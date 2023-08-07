@@ -20,12 +20,18 @@
   vars:
     operators_build_output: "{{ (cifmw_operator_build_output | default({'operators':{}})).operators }}"
   ansible.builtin.set_fact:
-    cifmw_edpm_prepare_common_env: "{{ cifmw_install_yamls_environment | combine({'PATH': cifmw_path}) }}"
+    cifmw_edpm_prepare_common_env: >-
+      {{
+        cifmw_install_yamls_environment |
+        combine({'PATH': cifmw_path}) |
+        combine(cifmw_edpm_prepare_extra_vars | default({}))
+      }}
     cifmw_edpm_prepare_make_openstack_env: |
       {% if cifmw_operator_build_meta_name is defined and cifmw_operator_build_meta_name in operators_build_output %}
       OPENSTACK_IMG: {{ operators_build_output[cifmw_operator_build_meta_name].image_catalog }}
       {% endif %}
-    cifmw_edpm_prepare_make_openstack_deploy_env: |
+    cifmw_edpm_prepare_make_openstack_deploy_prep_env: |
+      CLEANUP_DIR_CMD: "true"
       {% if cifmw_operator_build_meta_name is defined and cifmw_operator_build_meta_name in operators_build_output %}
       OPENSTACK_BRANCH: ""
       GIT_CLONE_OPTS: "-l"
@@ -96,32 +102,58 @@
   ansible.builtin.include_role:
     name: set_openstack_containers
 
-- name: Install OpenStack service
+# Prepare and kustomize the OpenStackControlPlane CR
+- name: Prepare OpenStack control plane CR
   vars:
-    make_openstack_deploy_env: "{{ cifmw_edpm_prepare_common_env |
-      combine(cifmw_edpm_prepare_make_openstack_deploy_env | from_yaml)}}"
-    make_openstack_deploy_dryrun: "{{ cifmw_edpm_prepare_dry_run }}"
+    make_openstack_deploy_prep_env: "{{ cifmw_edpm_prepare_common_env |
+      combine(cifmw_edpm_prepare_make_openstack_deploy_prep_env | from_yaml)}}"
+    make_openstack_deploy_prep_dryrun: "{{ cifmw_edpm_prepare_dry_run }}"
   ansible.builtin.include_role:
     name: 'install_yamls_makes'
-    tasks_from: 'make_openstack_deploy'
+    tasks_from: 'make_openstack_deploy_prep'
+
+- name: Deploy NetConfig
+  vars:
+    make_netconfig_deploy_env: "{{ cifmw_edpm_prepare_common_env }}"
+    make_netconfig_deploy_dryrun: "{{ cifmw_edpm_prepare_dry_run }}"
+  ansible.builtin.include_role:
+    name: 'install_yamls_makes'
+    tasks_from: 'make_netconfig_deploy'
+
+- name: Find the OpenStack CR manifest
+  ansible.builtin.find:
+    paths: "{{ cifmw_edpm_prepare_manifests_dir }}/{{ cifmw_install_yamls_defaults['NAMESPACE'] }}/openstack/cr"
+    contains: "kind: OpenStackControlPlane"
+    excludes: "kind: Kustomization"
+    patterns: "*.yaml"
+  register: cifmw_edpm_prepare_openstack_cr_manifest_paths
+
+- name: Ensure manifest exists
+  ansible.builtin.assert:
+    that: cifmw_edpm_prepare_openstack_cr_manifest_paths.matched == 1
+    quiet: true
+    msg: "Cannot determine OpenStackControlPlane deployment manifest"
+
+- name: Perform kustomizations to the OpenStackControlPlane CR
+  vars:
+    cifmw_edpm_kustomize_cr_path: "{{ cifmw_edpm_prepare_openstack_cr_manifest_paths.files[0].path }}"
+    cifmw_edpm_kustomize_content: "{{ cifmw_edpm_prepare_openstack_cr_kustomization | default('{}') }}"
+  ansible.builtin.include_role:
+    name: edpm_kustomize
+
+- name: Apply the OpenStackControlPlane CR
+  environment:
+    KUBECONFIG: "{{ cifmw_openshift_kubeconfig }}"
+    PATH: "{{ cifmw_path }}"
+  when: not cifmw_edpm_prepare_dry_run
+  ci_script:
+    output_dir: "{{ cifmw_edpm_prepare_basedir }}/artifacts"
+    script: "oc apply -f {{ cifmw_edpm_prepare_openstack_cr_manifest_paths.files[0].path }}"
 
 - name: Wait for OpenStack control plane to be installed
   when:
     - not cifmw_edpm_prepare_dry_run
   block:
-    - name: Find the OpenStack CR manifest
-      ansible.builtin.find:
-        paths: "{{ cifmw_edpm_prepare_manifests_dir }}/{{ cifmw_install_yamls_defaults['NAMESPACE'] }}/openstack/cr"
-        contains: "kind: OpenStackControlPlane"
-        patterns: "*.yaml"
-      register: cifmw_edpm_prepare_openstack_cr_manifest_paths
-
-    - name: Ensure manifest exists
-      ansible.builtin.assert:
-        that: cifmw_edpm_prepare_openstack_cr_manifest_paths.matched == 1
-        quiet: true
-        msg: "Cannot determine OpenStackControlPlane deployment manifest"
-
     - name: Find files out
       ansible.builtin.slurp:
         src: "{{ cifmw_edpm_prepare_openstack_cr_manifest_paths.files[0].path }}"

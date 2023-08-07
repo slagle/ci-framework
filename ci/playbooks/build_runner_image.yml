@@ -1,5 +1,5 @@
 ---
-- hosts: all
+- hosts: controller
   tasks:
     - name: Get git tag for image tagging
       register: edpm_ansible_tag

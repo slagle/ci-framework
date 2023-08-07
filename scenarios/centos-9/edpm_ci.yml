@@ -7,23 +7,16 @@ cifmw_install_yamls_vars:
   SSH_KEY: "{{ cifmw_basedir }}/artifacts/edpm_compute/ansibleee-ssh-key-id_rsa"
   DATAPLANE_REPO: "{{ ansible_user_dir }}/src/github.com/openstack-k8s-operators/dataplane-operator"
   STORAGE_CLASS: crc-csi-hostpath-provisioner
+  BMO_SETUP: false
 
-cifmw_use_crc: true
-cifmw_use_libvirt: true
-cifmw_rhol_crc_use_installyamls: true
-
-pre_infra:
-  - name: Download needed tools
-    inventory: "{{ cifmw_installyamls_repos }}/devsetup/hosts"
-    type: playbook
-    source: "{{ cifmw_installyamls_repos }}/devsetup/download_tools.yaml"
+cifmw_use_crc: false
+cifmw_use_libvirt: false
 
 # edpm_prepare role vars
 cifmw_operator_build_meta_name: "openstack-operator"
 cifmw_edpm_prepare_skip_crc_storage_creation: true
 
 # edpm_deploy role vars
-cifmw_edpm_deploy_manifests_dir: "{{ cifmw_installyamls_repos }}/out"
 cifmw_deploy_edpm: true
 
 # openshift_setup role vars
@@ -39,6 +32,20 @@ cifmw_openshift_kubeconfig: "{{ ansible_user_dir }}/.crc/machines/crc/kubeconfig
 cifmw_run_tests: false
 cifmw_tempest_tests_allowed:
   - tempest.scenario.test_server_basic_ops.TestServerBasicOps.test_server_basic_ops
+
+pre_infra:
+  - name: Download needed tools
+    inventory: 'localhost,'
+    connection: local
+    type: playbook
+    source: "{{ cifmw_installyamls_repos }}/devsetup/download_tools.yaml"
+
+post_infra:
+  - name: Fetch nodes facts and safe them as parameters
+    type: playbook
+    inventory: "{{ ansible_user_dir }}/ci-framework-data/artifacts/zuul_inventory.yml"
+    source: fetch_compute_facts.yml
+
 pre_deploy:
   - name: Disable openstack marketplace
     type: playbook

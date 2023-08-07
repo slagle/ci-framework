@@ -1,0 +1,139 @@
+---
+- hosts: localhost
+  gather_facts: false
+  connection: local
+  tasks:
+    - name: Ensure we know compute host keys
+      ansible.builtin.shell:
+        cmd: |
+          ssh-keyscan {{ hostvars[item].ansible_host }} >> ~/.ssh/known_hosts
+      loop: "{{ hostvars.keys() }}"
+      loop_control:
+        label: "{{ item }}"
+
+- hosts: all
+  gather_facts: true
+  tasks:
+    - name: Copy repositories from controller to compute
+      when:
+        - inventory_hostname is match('^compute.*')
+      become: true
+      ansible.builtin.copy:
+        dest: "/etc/yum.repos.d/"
+        src: "{{ cifmw_basedir }}/artifacts/repositories/"
+
+- hosts: localhost
+  gather_facts: false
+  connection: local
+  tasks:
+    - name: Load parameters
+      ansible.builtin.include_vars:
+        dir: "{{ item }}"
+      loop:
+        - "{{ cifmw_basedir }}/artifacts/parameters"
+        - "/etc/ci/env"
+      loop_control:
+        label: "{{ item }}"
+
+    - name: Ensure that the isolated net was configured for crc and the compute
+      ansible.builtin.assert:
+        that:
+          - crc_ci_bootstrap_networks_out is defined
+          - "'crc' in crc_ci_bootstrap_networks_out"
+          - "'default' in crc_ci_bootstrap_networks_out['crc']"
+          - "'compute' in crc_ci_bootstrap_networks_out"
+          - "'default' in crc_ci_bootstrap_networks_out['compute']"
+
+    - name: Set facts for further usage within the framework
+      ansible.builtin.set_fact:
+        cifmw_edpm_deploy_extra_vars:
+          SSH_KEY_FILE: "{{ ansible_user_dir }}/.ssh/id_rsa"
+          DATAPLANE_COMPUTE_IP: "{{ crc_ci_bootstrap_networks_out.compute.default.ip | ansible.utils.ipaddr('address') }}"
+          DATAPLANE_NETWORK_CONFIG_TEMPLATE: "templates/ci/extracted_crc_nic2_vlans.j2"
+        cifmw_edpm_prepare_extra_vars:
+          NNCP_INTERFACE: "{{ crc_ci_bootstrap_networks_out.crc.default.iface }}"
+          NETWORK_MTU: "{{ crc_ci_bootstrap_networks_out.crc.default.mtu }}"
+
+    - name: Ensure we know about the private host keys
+      ansible.builtin.shell:
+        cmd: |
+          ssh-keyscan {{ cifmw_edpm_deploy_extra_vars.DATAPLANE_COMPUTE_IP }} >> ~/.ssh/known_hosts
+
+    - name: Create the openstack CRDs target directory
+      ansible.builtin.file:
+        path: "{{ cifmw_install_yamls_environment.OUT }}/{{ cifmw_install_yamls_defaults.NAMESPACE }}/openstack/cr"
+        state: directory
+
+    - name: Collect the reference name of adminPassword
+      environment:
+        PATH: "{{ cifmw_path }}"
+        KUBECONFIG: "{{ cifmw_openshift_kubeconfig }}"
+      ansible.builtin.command:
+        cmd: "oc -n openshift-dns get svc dns-default -o jsonpath='{.spec.clusterIP}'"
+      register: cifmw_fetch_compute_facts_dns_ip
+
+    - name: Save compute info
+      vars:
+        dns_servers: "{{ ((['192.168.122.80'] + ansible_facts['dns']['nameservers']) | unique)[0:2] }}"
+        file_content:
+          cifmw_edpm_prepare_extra_vars: "{{ cifmw_edpm_prepare_extra_vars }}"
+          cifmw_edpm_deploy_extra_vars: "{{ cifmw_edpm_deploy_extra_vars }}"
+          cifmw_edpm_deploy_dataplane_cr_kustomization: |-
+            apiVersion: kustomize.config.k8s.io/v1beta1
+            kind: Kustomization
+            resources:
+            namespace: {{ cifmw_install_yamls_defaults.NAMESPACE }}
+            patches:
+            - target:
+                kind: OpenStackDataPlane
+              patch: |-
+                - op: replace
+                  path: /spec/roles/edpm-compute/nodeTemplate/ansibleVars/edpm_network_config_template
+                  value: "{{ cifmw_edpm_deploy_extra_vars.DATAPLANE_NETWORK_CONFIG_TEMPLATE }}"
+
+                - op: replace
+                  path: /spec/roles/edpm-compute/nodeTemplate/ansibleVars/neutron_public_interface_name
+                  value: "{{ crc_ci_bootstrap_networks_out.compute.default.iface }}"
+
+                - op: replace
+                  path: /spec/roles/edpm-compute/nodeTemplate/ansibleVars/ctlplane_mtu
+                  value: "{{ crc_ci_bootstrap_networks_out.compute.default.mtu }}"
+
+                - op: replace
+                  path: /spec/roles/edpm-compute/nodeTemplate/ansibleVars/edpm_os_net_config_mappings
+                  value:
+                    net_config_data_lookup:
+                      edpm-compute:
+                        nic1: "{{ crc_ci_bootstrap_networks_out.compute.default.iface }}"
+
+                - op: replace
+                  path: /spec/roles/edpm-compute/nodeTemplate/ansibleUser
+                  value: "{{ hostvars.compute.ansible_user | default('zuul') }}"
+
+                - op: replace
+                  path: /spec/roles/edpm-compute/nodeTemplate/ansibleVars/ctlplane_dns_nameservers
+                  value:
+            {% for dns_server in dns_servers %}
+                    - "{{ dns_server }}"
+            {% endfor %}
+
+          cifmw_edpm_prepare_openstack_cr_kustomization: |-
+            apiVersion: kustomize.config.k8s.io/v1beta1
+            kind: Kustomization
+            resources:
+            namespace: {{ cifmw_install_yamls_defaults.NAMESPACE }}
+            patches:
+            - target:
+                kind: OpenStackControlPlane
+              patch: |-
+                - op: replace
+                  path: /spec/dns/template/options
+                  value: [
+                    {
+                      "key": "server",
+                      "values": [ {{ cifmw_fetch_compute_facts_dns_ip.stdout | trim }} ]
+                    },
+                  ]
+      ansible.builtin.copy:
+        dest: "{{ cifmw_basedir }}/artifacts/{{ step }}_{{ hook_name }}.yml"
+        content: "{{ file_content | to_nice_yaml }}"

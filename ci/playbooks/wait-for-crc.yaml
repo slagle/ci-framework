@@ -1,0 +1,144 @@
+---
+- hosts: crc
+  gather_facts: false
+  tasks:
+    - name: Restart the service because zuul base job is overwriting /etc/resolv.conf
+      become: true
+      ansible.builtin.systemd:
+        state: restarted
+        name: crc-pre
+
+    - name: Wait for CRC to be ready
+      register: wait_crc
+      ansible.builtin.command: |
+        oc login api.crc.testing:6443 -u kubeadmin -p "123456789" --insecure-skip-tls-verify=true
+      retries: 20
+      delay: 60
+      until:
+        - wait_crc is defined
+        - wait_crc.rc is defined
+        - wait_crc.rc == 0
+
+    - name: Set fact for controller
+      ansible.builtin.set_fact:
+        controller_ip: "{{ hostvars['controller']['ansible_default_ipv4']['address'] }}"
+
+- hosts: controller
+  gather_facts: true
+  tasks:
+    - name: Create zuul-output directory
+      ansible.builtin.file:
+        path: "{{ ansible_user_dir }}/ci-framework-data/artifacts"
+        state: directory
+
+    - name: Save zuul inventory
+      ansible.builtin.copy:
+        dest: "{{ ansible_user_dir }}/ci-framework-data/artifacts/zuul_inventory.yml"
+        src: "{{ inventory_file }}"
+
+    - name: Set fact for CRC
+      ansible.builtin.set_fact:
+        crc_ip: "{{ hostvars['crc']['ansible_default_ipv4']['address'] }}"
+
+    - name: Add ssh keys
+      ansible.posix.authorized_key:
+        user: "{{ ansible_user | default('zuul') }}"
+        key: "{{ item }}"
+      loop:
+        # dpawlik
+        - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOKLl0NYKwoZ/JY5KeZU8VwRAggeOxqQJeoqp3dsAaY9 dpawlik@x1
+        # cedric
+        - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHUnwjB20UKmsSed9X73eGNV5AOEFccQ3NYrRW776pEk cjeanner
+        # pablo
+        - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDK7XsKtjKF1/T7q26T3oPyTyCTz9yOhp/5Ptpx/yGFSosIViVy+om5U+D56NJFRhsZ6chTpLpt/EsghwuzGshv3tGzmbLopcPc5Ux76oebzzZryg/2TOHbo4gEmNMK7hhXLv08K52pegtPYmBQ5V7PkchMQ1AjUwdzRMc8RLxcxXXMG4G1Pp/PLykuHmwHYil1rFyYWB62wgIRmzgXzkHy9tmnKB2lwgCM25UmFEC/8mDxA3xsOtT9YuhYIU4N5jAeDyzscDedEAeMghKyIFVx3vLbgThNiH7LC9fzGYQACCvYaUJ3T27IuzAd/uGltphBDK2mkH1eKAE26MQ1GE7Xpy49y8+Od+imbLx4ORn6zrVu0+QrOnhtZvuxAVZIJ3HGZ4sSmQtdpjOlyqgFoyic4hjkQfuUt7JvJtYjE00TzlMomflAvR4KFZHucoMzABgUHZSV8E0otlnq11rn9FtDt7ajIDRNVg2Uf1K7/3koPzg1XeC3oFcolhRHyQYDfi69VzPJW5Vl2F1pQh5vCIKOCYQ+nYXbNx0iEAgL7l7kpythUohKoh4/9jSdtlyhAYX96lHfP1MShX1KgcWAEePdU4kaMNrsIMb3/WsMVDfH+2XJNy8bPxr+U+jOS9/KtgN6ACDWiqtxpozTsEEVMAu7vCZyr5EvztscIUIh6TcMCw== pabrodri@pabrodri-remote
+        # chandan
+        - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGE+Kh8TW2fGc2U54HbeRkRrGGf46YbxAcxRB4XqLO/4 raukadah
+        # ysandeep
+        - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQD9hHZMu0S/A/BhYMyc3X/qixn/1aoPUWIbWOF01JLkCeB5Vz7EFdW8ohqr5fqe11mXRhNKpeP7NQcTZ8JjdgE5XfA8+elhjmIlJJGEuUe278KmVLie4R7H+Mdu1FcVQ7RpJRginyqLOa5U9/T0oh+oNuHjEqMVAAfrpMGo2e0SBrFs92+sowK+u1SCoF1QI34mg4aHfFY15dDFoSu6z4CUtfSI/bH+pJKPw/xB7I/Ev1RMu5bouhsqtaXCldoBagQKI1d8ZslPZ043IC+0XBG75ZA7bfWs9pW0ReYG9a3J63DEPMSsp3Tnlu36xVYY+/GtpZROgqZxyU3UnfrmFEwL sandyada
+        # afazekas
+        - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCnB+y028w0+dMjKfRWiAnQ5Q+ej6Gc7BtHpITFndhx8Gywh0L5B5EFWHBB2fdmw7boDmqhGKTTMgaxTtUhQAFuHsfhSrlQIbmUiIgrGkFUx4Pbhr2Xf1NFqM1nXNXT7asuzwFAnBsznR3zo+uj5NWzbj8Ualr1bUJ22iq4eegBm3k18iKKEl0JelDxmcZKihyg6+2Va84cd8P6BbBPs9SUdPXVZNxcFtyDgsMOQGFsh7Ca9RMdf4tz+ONj+s3ZFpcy8xapEWrwHlXad/by3PMta0sOxYiWJTOp93yrMvgdx+jj4jsBxhvw1Yjpzyfr9Y8GU9MB9R7vdjd6D/OWSA+Iwapf4LqFNBCyo45m1rMK1ha7p7fVT5CGUbxIKcBfW3L7iJ/BAZNJAIUQUmnmF2k1m8/odZB+gHStinHOURryHpKEgy1Wbuww1pKXJTSRXBjssX+dOuUYeiWxMuHx/2VCJRmf2pPH5+IRwxVwFINXlYMkLTwYDDGVTO110U4ekq8= afazekas
+
+    - name: Add entries related to the CRC
+      become: true
+      vars:
+        crc_ip: "{{ hostvars['crc']['ansible_default_ipv4']['address'] }}"
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        line: >
+          {{ crc_ip }} api.crc.testing
+          canary-openshift-ingress-canary.apps-crc.testing
+          console-openshift-console.apps-crc.testing
+          default-route-openshift-image-registry.apps-crc.testing
+          downloads-openshift-console.apps-crc.testing
+          oauth-openshift.apps-crc.testing
+        create: true
+
+    - name: Install other packages
+      become: true
+      ansible.builtin.package:
+        name:
+          - make
+          - git
+          - vim
+          - golang
+          - tar
+          - ansible-core
+          - skopeo
+          - sqlite
+          - jq
+          - podman
+          - tmux
+          - bind-utils
+        state: present
+
+    - name: Generate an ssh keypair
+      ansible.builtin.command:
+        cmd: ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -P ''
+
+    - name: Get public key
+      register: pub_key_slurp
+      ansible.builtin.slurp:
+        path: "{{ ansible_user_dir }}/.ssh/id_ed25519.pub"
+
+    - name: Inject key in authorized_key
+      delegate_to: crc
+      ansible.posix.authorized_key:
+        user: core
+        key: "{{ pub_key_slurp['content'] | b64decode }}"
+
+    - name: Get the default iface connection
+      register: controller_default_connection_out
+      ansible.builtin.command:
+        cmd: "nmcli -g general.connection device show eth0"
+
+    - name: Add the deployment DNS in the controller resolv.conf
+      vars:
+        dns_servers_string: "192.168.122.80 {{ ansible_facts['dns']['nameservers'][0:1] | join(' ') }}"
+      become: true
+      ansible.builtin.shell:
+        cmd: |-
+          nmcli con mod '{{ controller_default_connection_out.stdout | trim }}' ipv4.dns '{{ dns_servers_string }}' ipv4.route-metric 100;
+          nmcli con up '{{ controller_default_connection_out.stdout | trim }}';
+
+- hosts: compute
+  gather_facts: false
+  tasks:
+
+    - name: Create temporary user
+      become: true
+      vars:
+        password: zuulci
+      ansible.builtin.user:
+        name: zuulci
+        state: present
+        password: "{{ password | password_hash('sha512') }}"
+        update_password: always
+
+    - name: Add user to sudo
+      become: true
+      ansible.builtin.lineinfile:
+        dest: /etc/sudoers
+        state: present
+        regexp: '^zuulci'
+        line: 'zuulci ALL=(ALL) NOPASSWD: ALL'
+        validate: 'visudo -cf %s'
