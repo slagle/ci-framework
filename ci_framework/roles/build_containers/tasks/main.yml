@@ -39,8 +39,7 @@
     chdir: "{{ cifmw_build_containers_basedir }}/artifacts"
     output_dir: "{{ cifmw_build_containers_basedir }}/artifacts"
     script: set -o pipefail && bash build_containers.sh 2>&1 {{ cifmw_build_containers_timestamper_cmd }} > {{ cifmw_build_containers_basedir }}/logs/build.log
-  environment:
-   PATH: /usr/local/bin:{{ ansible_env.PATH }}
+    executable: /usr/local/bin:{{ ansible_env.PATH }}
 
 - name: Make sure authfile exists
   when:
