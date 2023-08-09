@@ -68,8 +68,7 @@
   become: true
   ci_script:
     output_dir: "{{ cifmw_build_containers_basedir }}/artifacts"
-    script: |
-      podman images | grep {{ cifmw_build_containers_container_name_prefix }} > {{ cifmw_build_containers_basedir }}/logs/containers-built.log
+    script: podman images | grep {{ cifmw_build_containers_container_name_prefix }} > {{ cifmw_build_containers_basedir }}/logs/containers-built.log
 
 - name: "Push image: {{ item }}"
   become: true
