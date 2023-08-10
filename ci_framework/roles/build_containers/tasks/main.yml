@@ -72,7 +72,7 @@
 - name: "Push image: {{ item }}"
   become: true
   ci_script:
-    output_dir: "{{ cifmw_build_containers_basedir }}/artifacts"
+    output_dir: "{{ cifmw_build_containers_basedir }}"
     script: "buildah push {{ item }}:{{ cifmw_build_containers_image_tag }}"
   loop: "{{ built_images.stdout_lines }}"
   when:
